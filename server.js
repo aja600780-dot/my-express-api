@@ -64,6 +64,25 @@ app.get('/items/:id', (req, res) => {
   });
 });
 
+// Update Item (PUT)
+app.put('/items/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, description } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Name is required' });
+  }
+  const query = `UPDATE items SET name = ?, description = ? WHERE id = ?`;
+  db.run(query, [name, description || '', id], function(err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+    res.json({ message: 'Item updated successfully', id, name, description: description || '' });
+  });
+});
+
 // Delete Item (DELETE)
 app.delete('/items/:id', (req, res) => {
   const { id } = req.params;
