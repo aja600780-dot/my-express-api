@@ -25,38 +25,36 @@ app.get('/', (req, res) => {
   res.json({ message: 'Welcome to my Express API with SQLite!' });
 });
 
-// Create Item (POST)
-app.post('/items', (req, res) => {
-  const { name, description } = req.body;
-  if (!name) {
-    return res.status(400).json({ error: 'Name is required' });
-  }
-  const query = `INSERT INTO items (name, description) VALUES (?, ?)`;
-  db.run(query, [name, description || ''], function(err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+// Create Item (POST) with Validation
+app.post('/items', (req, res, next) => {
+  try {
+    const { name, description } = req.body;
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      return res.status(400).json({ error: 'Valid item name is required' });
     }
-    res.status(201).json({ id: this.lastID, name, description: description || '' });
-  });
+    const query = `INSERT INTO items (name, description) VALUES (?, ?)`;
+    db.run(query, [name.trim(), description ? description.trim() : ''], function(err) {
+      if (err) return next(err);
+      res.status(201).json({ id: this.lastID, name: name.trim(), description: description ? description.trim() : '' });
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Read All Items (GET)
-app.get('/items', (req, res) => {
+app.get('/items', (req, res, next) => {
   db.all(`SELECT * FROM items`, [], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+    if (err) return next(err);
     res.json({ items: rows });
   });
 });
 
 // Read Single Item by ID (GET)
-app.get('/items/:id', (req, res) => {
+app.get('/items/:id', (req, res, next) => {
   const { id } = req.params;
   db.get(`SELECT * FROM items WHERE id = ?`, [id], (err, row) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+    if (err) return next(err);
     if (!row) {
       return res.status(404).json({ error: 'Item not found' });
     }
@@ -64,37 +62,43 @@ app.get('/items/:id', (req, res) => {
   });
 });
 
-// Update Item (PUT)
-app.put('/items/:id', (req, res) => {
-  const { id } = req.params;
-  const { name, description } = req.body;
-  if (!name) {
-    return res.status(400).json({ error: 'Name is required' });
+// Update Item (PUT) with Validation
+app.put('/items/:id', (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, description } = req.body;
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      return res.status(400).json({ error: 'Valid item name is required' });
+    }
+    const query = `UPDATE items SET name = ?, description = ? WHERE id = ?`;
+    db.run(query, [name.trim(), description ? description.trim() : '', id], function(err) {
+      if (err) return next(err);
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Item not found' });
+      }
+      res.json({ message: 'Item updated successfully', id, name: name.trim(), description: description ? description.trim() : '' });
+    });
+  } catch (err) {
+    next(err);
   }
-  const query = `UPDATE items SET name = ?, description = ? WHERE id = ?`;
-  db.run(query, [name, description || '', id], function(err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-    res.json({ message: 'Item updated successfully', id, name, description: description || '' });
-  });
 });
 
 // Delete Item (DELETE)
-app.delete('/items/:id', (req, res) => {
+app.delete('/items/:id', (req, res, next) => {
   const { id } = req.params;
   db.run(`DELETE FROM items WHERE id = ?`, [id], function(err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+    if (err) return next(err);
     if (this.changes === 0) {
       return res.status(404).json({ error: 'Item not found' });
     }
     res.json({ message: 'Item deleted successfully', deletedId: id });
   });
+});
+
+// Centralized Error Handling Middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Internal Server Error', details: err.message });
 });
 
 app.listen(PORT, () => {
